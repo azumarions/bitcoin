@@ -5,11 +5,11 @@
     <title>Chart</title>
     <style>
         #dashboard_div{
-            width: 600px;
+            width: 800px;
             border: 1px solid #ccc;
         }
         #chart_div{
-            height:400px;
+            height:600px;
             border-bottom: 1px solid #ccc;
         }
         #filter_div{
@@ -21,9 +21,6 @@
         }
         .bottom_chart{
             border-bottom: 1px solid #ccc;
-        }
-        .test {
-            background-color: rgb(126, 117, 117);
         }
     </style>
 
@@ -102,6 +99,12 @@
                 periods: [],
                 values: []
             },
+            events: {
+                enable: false,
+                indexes: [],
+                values: [],
+                first: null
+            }
         };
 
         function initConfigValues(){
@@ -128,6 +131,8 @@
             config.hv.indexes = [];
             config.hv.periods = [];
             config.hv.values = [];
+            config.events.indexes = [];
+            config.events.values = [];
         }
 
         function drawChart(dataTable) {
@@ -199,6 +204,17 @@
                     };
                     view.columns.push(config.candlestick.numViews + config.ichimoku.indexes[i]);
                 }
+            }
+
+            if (config.events.enable == true && config.events.indexes.length > 0){
+                options.series[config.events.indexes[0]] = {
+                    'type': 'line',
+                    tooltip: 'none',
+                    enableInteractivity: false,
+                    lineWidth: 0
+                };
+                view.columns.push(config.candlestick.numViews + config.events.indexes[0]);
+                view.columns.push(config.candlestick.numViews + config.events.indexes[1]);
             }
 
             if (config.volume.enable == true) {
@@ -275,7 +291,7 @@
                         legend: {'position': 'none'},
                         seriesType: "bars",
                         series: {
-                            1: {type: 'line', lineWidth: 1 },
+                            1: {type: 'line', lineWidth: 1},
                             2: {type: 'line', lineWidth: 1}
                         }
                     },
@@ -386,6 +402,10 @@
                 params["hvPeriod1"] = config.hv.periods[0];
                 params["hvPeriod2"] = config.hv.periods[1];
                 params["hvPeriod3"] = config.hv.periods[2];
+            }
+
+            if (config.events.enable == true) {
+                params["events"] = true;
             }
 
             $.get("/api/candle/", params).done(function (data) {
@@ -529,6 +549,24 @@
                     }
                 }
 
+                if (data['events'] != undefined) {
+                    config.dataTable.index += 1;
+                    config.events.indexes[0] = config.dataTable.index;
+                    config.dataTable.index += 1;
+                    config.events.indexes[1] = config.dataTable.index;
+
+                    config.events.values = data['events']['signals'];
+                    config.events.first = config.events.values.shift();
+
+                    dataTable.addColumn('number', 'Marker');
+                    dataTable.addColumn({type:'string', role:'annotation'});
+
+                    if (data['events']['profit'] != undefined) {
+                        profit = "$" + String(Math.round(data['events']['profit'] * 100) / 100);
+                        $('#profit').html("Change:" + profit);
+                    }
+                }
+
                 var googleChartData = [];
                 var candles = data["candles"];
 
@@ -603,6 +641,21 @@
                         }
                     }
 
+                    if (data['events'] != undefined) {
+                        var event = config.events.first
+                        if (event == undefined) {
+                            datas.push(null);
+                            datas.push(null);
+                        }else if(event.time == candle.time) {
+                            datas.push(candle.high + 1);
+                            datas.push(event.side);
+                            config.events.first = config.events.values.shift();
+                        }else{
+                            datas.push(null);
+                            datas.push(null);
+                        }
+                    }
+
                     if (data["rsi"] != undefined){
                         datas.push(config.rsi.up);
                         if (config.rsi.values[i] == 0) {
@@ -664,7 +717,6 @@
                 }
                 send();
             });
-
             $("#inputSmaPeriod1").change(function() {
                 config.sma.periods[0] = this.value;
                 send();
@@ -793,11 +845,22 @@
                 send();
             });
 
+            $('#inputEvents').change(function() {
+                if (this.checked === true) {
+                    config.events.enable = true;
+                } else {
+                    config.events.enable = false;
+                    $('#profit').html("");
+                }
+                send();
+            });
+
         }
+
     </script>
 </head>
 <body>
-<div class="test">
+
 <div>
     <button onclick="changeDuration('1s');">1s</button>
     <button onclick="changeDuration('1m');">1m</button>
@@ -851,11 +914,14 @@
     <input id="inputHvPeriod3" type="text" value="252" style="width: 15px;">
 </div>
 
+<div>
+    Events <input id="inputEvents" type="checkbox"> <div id="profit"></div>
+</div>
+
 <div id="dashboard_div">
     <div id="chart_div"></div>
     <div id="technical_div"></div>
     <div id="filter_div"></div>
-</div>
 </div>
 
 </body>
